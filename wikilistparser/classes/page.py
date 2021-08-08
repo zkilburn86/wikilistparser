@@ -1,28 +1,45 @@
 from bs4 import BeautifulSoup
 
 
+class PageParseException(Exception):
+    
+    parse_error = ''
+
+    def __init__(self, parse_error, *args: object) -> None:
+        super().__init__(*args)
+        self.parse_error = parse_error
+
+
 class Page:
 
     title = ''
     contents = []
+    has_table_of_contents = False
 
     def __init__(self, scrapy_response):
         self.url = scrapy_response.url
         self.soup = self._get_soup(scrapy_response)
+        self._set_has_table_of_contents()
 
-    def get_title(self):
+    def set_title(self):
         try:
-            return self.soup.find('title').text
+            self.title = self.soup.find('title').text
         except AttributeError:
-            return ''
+            return
 
-    def get_contents(self):
+    def set_contents(self):
         toc = self.soup.find('div', 'toc')
+        if toc is None:
+            raise PageParseException(parse_error='Table of Contents not found')
         for section in toc.find('ul').find_all('li', 'toclevel-1'):
             top_section = self._parse_section(section)
             if (self._has_subsection(section)):
                 top_section['subsections'] = self._parse_subsections(section)
             self.contents.append(top_section)
+
+    def _set_has_table_of_contents(self):
+        if self.soup.find('div', 'toc') is not None:
+            self.has_table_of_contents = True
 
     def _get_soup(self, scrapy_response):
         return BeautifulSoup(scrapy_response.body, features='lxml')
