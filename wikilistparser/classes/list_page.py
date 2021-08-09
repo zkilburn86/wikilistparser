@@ -1,5 +1,5 @@
 from wikilistparser.classes.page import Page, PageParseException
-
+from wikilistparser.utilities.parse_utility import soup_attribute_exists
 
 class PageTypeException(Exception):
     pass
@@ -10,9 +10,10 @@ class ListPage(Page):
     _BASE_URL = 'https://en.wikipedia.org'
     _parsed_items = []
     page_lists = []
+    page_list_urls = []
 
-    def __init__(self, scrapy_response):
-        super().__init__(scrapy_response)
+    def __init__(self, scrapy_response, request_response=None):
+        super().__init__(scrapy_response, request_response)
         try:
             self.set_contents()
         except PageParseException as e:
@@ -25,10 +26,7 @@ class ListPage(Page):
 
     def _has_lists(self):
         body = self.soup.find('div', id='bodyContent')
-        if body.find_all('ul') is None:
-            return False
-        else:
-            return True
+        return soup_attribute_exists(body, 'ul')
 
     def _parse_lists_by_section(self, section):
         if section['subsections'] == []:
@@ -40,7 +38,8 @@ class ListPage(Page):
                     
     def _parse_list_item(self, item):
         url = ''
-        if item.find('a').get('href') is not None:
+        link = item.find('a').get('href')
+        if link is not None and link.startswith('/wiki'):
             url = self._BASE_URL + item.find('a').get('href')
         result = {
             "title": item.find('a').text,
@@ -55,18 +54,21 @@ class ListPage(Page):
             if parsed_item['title'] in self._parsed_items:
                 continue
             if len(item.text.split('\n')) == 1:
-                self._append_and_update_master_list(lists, parsed_item)
+                self._append_and_update_page_lists(lists, parsed_item)
             elif len(item.text.split('\n')) > 1:
                 parsed_item['sublists'] = self._parse_items(item.find_next('ul'))
-                self._append_and_update_master_list(lists, parsed_item)
+                self._append_and_update_page_lists(lists, parsed_item)
         return lists
 
-    def _append_and_update_master_list(self, lists, item):
+    def _append_and_update_page_lists(self, lists, item):
         lists.append(item)
         self._parsed_items.append(item['title'])
+        if item['url'] != '':
+            self.page_list_urls.append(item['url'])
     
     def _set_page_lists(self):
-        self.soup.find('div', id='mw-hidden-catlinks').decompose()
+        if soup_attribute_exists(self.soup, 'div', 'mw-hidden-catlinks', 'id'):
+            self.soup.find('div', id='mw-hidden-catlinks').decompose()
         sections = self.soup.find('div', id='bodyContent').find_all('ul')
         for section in sections:
             self.page_lists.extend(self._parse_items(section))

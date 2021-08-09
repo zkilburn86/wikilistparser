@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+from wikilistparser.utilities.parse_utility import soup_attribute_exists
 
 
 class PageParseException(Exception):
@@ -16,9 +17,9 @@ class Page:
     contents = []
     has_table_of_contents = False
 
-    def __init__(self, scrapy_response):
-        self.url = scrapy_response.url
-        self.soup = self._get_soup(scrapy_response)
+    def __init__(self, scrapy_response, request_response=None):
+        self.url = scrapy_response.url if scrapy_response is not None else request_response.url
+        self.soup = self._get_soup(scrapy_response, request_response)
         self._set_has_table_of_contents()
 
     def set_title(self):
@@ -38,11 +39,13 @@ class Page:
             self.contents.append(top_section)
 
     def _set_has_table_of_contents(self):
-        if self.soup.find('div', 'toc') is not None:
-            self.has_table_of_contents = True
+        self.has_table_of_contents = soup_attribute_exists(self.soup, 'div', 'toc', 'class')
 
-    def _get_soup(self, scrapy_response):
-        return BeautifulSoup(scrapy_response.body, features='lxml')
+    def _get_soup(self, scrapy_response, request_response):
+        if request_response is None:
+            return BeautifulSoup(scrapy_response.body, features='lxml')
+        else:
+            return BeautifulSoup(request_response.text, features='lxml')
 
     def _has_subsection(self, section):
         if (len(section.find_all('li')) > 0):
